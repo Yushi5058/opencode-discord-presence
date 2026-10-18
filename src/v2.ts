@@ -269,6 +269,121 @@ function updateIdentityCache(cache: Map<string, SessionIdentity>, envelope: V2Ev
   }
 }
 
+// ── process-wide engine sharing ─────────────────────────────────────────────
+
+/**
+ * V2 instantiates a plugin once per project directory inside a single server
+ * process, and each load is a separate module graph, so module-level state does
+ * not protect against duplication the way the V1 `isPrimaryPluginInstance`
+ * flag used to. Without sharing, every project would build its own presence
+ * engine and open its own Discord IPC connection, so the activity shown in
+ * Discord would flip between instances.
+ *
+ * The engine is therefore kept once per process and ref-counted. Two further
+ * consequences of per-directory loading are handled here as well:
+ *
+ *   - the event stream is process-wide, so every load receives every event;
+ *     `markEventSeen` makes sure the engine only acts on each event once.
+ *   - hooks and events from different loads can otherwise interleave, so engine
+ *     calls run through a shared serial queue, matching V1's single-context
+ *     behaviour.
+ */
+const ENGINE_KEY = Symbol.for("opencode-discord-presence.v2.engine")
+
+/** Number of event ids remembered to keep duplicate deliveries out. */
+export const SEEN_EVENT_LIMIT = 4096
+
+export interface EngineEntry {
+  handlers: Promise<V1Handlers>
+  refs: number
+  seenEvents: Set<string>
+  seenOrder: string[]
+  queue: Promise<unknown>
+}
+
+type EngineStore = { [ENGINE_KEY]?: EngineEntry }
+
+/**
+ * Remember an event id process-wide. Returns `false` when the event was already
+ * handled by another loaded instance of this plugin.
+ */
+export function markEventSeen(entry: EngineEntry, envelope: unknown): boolean {
+  const id = asString(asRecord(envelope).id)
+  // Events without an id cannot be deduplicated; pass them through.
+  if (!id) return true
+
+  if (entry.seenEvents.has(id)) return false
+
+  entry.seenEvents.add(id)
+  entry.seenOrder.push(id)
+  if (entry.seenOrder.length > SEEN_EVENT_LIMIT) {
+    const oldest = entry.seenOrder.shift()
+    if (oldest !== undefined) entry.seenEvents.delete(oldest)
+  }
+  return true
+}
+
+/** Run an engine call after every earlier one, across all loaded instances. */
+export function runSerialized<T>(entry: EngineEntry, task: () => Promise<T>): Promise<T> {
+  const result = entry.queue.then(task, task)
+  // Keep the chain alive even when a call rejects.
+  entry.queue = result.catch(() => undefined)
+  return result
+}
+
+function createEngine(ctx: V2Context): Promise<V1Handlers> {
+  const directory = ctx.location.directory
+  const debug = process.env.OPENCODE_DISCORD_DEBUG === "true"
+  const pluginInput = {
+    directory,
+    worktree: directory,
+    project: ctx.location.project ?? { id: "", directory, worktree: directory },
+    client: createClientShim(ctx, debug),
+    serverUrl: new URL("http://127.0.0.1"),
+    experimental_workspace: { register() {} },
+    $: undefined,
+  } as unknown as Parameters<typeof OpenCodeDiscordPresence>[0]
+
+  return OpenCodeDiscordPresence(pluginInput).then((handlers) => handlers as V1Handlers)
+}
+
+/** Borrow the process-wide engine, creating it on first use. */
+export function acquireEngine(ctx: V2Context): EngineEntry {
+  const store = globalThis as unknown as EngineStore
+  const existing = store[ENGINE_KEY]
+  if (existing) {
+    existing.refs += 1
+    return existing
+  }
+
+  const entry: EngineEntry = {
+    handlers: createEngine(ctx),
+    refs: 1,
+    seenEvents: new Set(),
+    seenOrder: [],
+    queue: Promise.resolve(),
+  }
+  store[ENGINE_KEY] = entry
+  return entry
+}
+
+/** Drop one reference; the last user disposes the engine and its connection. */
+export async function releaseEngine(entry: EngineEntry): Promise<void> {
+  const store = globalThis as unknown as EngineStore
+  if (store[ENGINE_KEY] !== entry) return
+
+  entry.refs -= 1
+  if (entry.refs > 0) return
+
+  delete store[ENGINE_KEY]
+  try {
+    const handlers = await entry.handlers
+    await (handlers as { dispose?: () => Promise<void> }).dispose?.()
+  } catch {
+    // ignore
+  }
+}
+
 // ── V2 plugin definition ────────────────────────────────────────────────────
 
 /**
@@ -279,22 +394,10 @@ function updateIdentityCache(cache: Map<string, SessionIdentity>, envelope: V2Ev
 export const openCodeDiscordPresenceV2 = {
   id: PLUGIN_ID,
   async setup(ctx: V2Context): Promise<(() => Promise<void>) | void> {
-    const directory = ctx.location.directory
-    const debug = process.env.OPENCODE_DISCORD_DEBUG === "true"
-    const client = createClientShim(ctx, debug)
-
-    const pluginInput = {
-      directory,
-      worktree: directory,
-      project: ctx.location.project ?? { id: "", directory, worktree: directory },
-      client,
-      serverUrl: new URL("http://127.0.0.1"),
-      experimental_workspace: { register() {} },
-      $: undefined,
-    } as unknown as Parameters<typeof OpenCodeDiscordPresence>[0]
-
-    // Reuse the entire V1 presence engine by invoking it with shimmed inputs.
-    const handlers: V1Handlers = await OpenCodeDiscordPresence(pluginInput)
+    // Reuse the entire V1 presence engine, sharing one engine across every
+    // project directory loaded in this process.
+    const entry = acquireEngine(ctx)
+    const handlers: V1Handlers = await entry.handlers
 
     // Disabled, or this is not the process-wide primary instance: register
     // nothing so we do not duplicate the instance that already owns Discord.
@@ -320,15 +423,17 @@ export const openCodeDiscordPresenceV2 = {
             identityResolved,
             event.sessionID,
           )
-          await chatMessage(
-            {
-              sessionID: event.sessionID,
-              agent: identity.agent,
-              model: identity.model
-                ? { providerID: identity.providerID ?? "", modelID: identity.model }
-                : undefined,
-            } as never,
-            { message: undefined, parts: [] } as never,
+          await runSerialized(entry, () =>
+            chatMessage(
+              {
+                sessionID: event.sessionID,
+                agent: identity.agent,
+                model: identity.model
+                  ? { providerID: identity.providerID ?? "", modelID: identity.model }
+                  : undefined,
+              } as never,
+              { message: undefined, parts: [] } as never,
+            ),
           )
         }),
       )
@@ -340,9 +445,11 @@ export const openCodeDiscordPresenceV2 = {
       const before = handlers["tool.execute.before"]
       registrations.push(
         await ctx.tool.hook("execute.before", async (event) => {
-          await before(
-            { tool: event.tool, sessionID: event.sessionID, callID: event.id } as never,
-            { args: event.input } as never,
+          await runSerialized(entry, () =>
+            before(
+              { tool: event.tool, sessionID: event.sessionID, callID: event.id } as never,
+              { args: event.input } as never,
+            ),
           )
         }),
       )
@@ -354,9 +461,11 @@ export const openCodeDiscordPresenceV2 = {
       const after = handlers["tool.execute.after"]
       registrations.push(
         await ctx.tool.hook("execute.after", async (event) => {
-          await after(
-            { tool: event.tool, sessionID: event.sessionID, callID: event.id } as never,
-            {} as never,
+          await runSerialized(entry, () =>
+            after(
+              { tool: event.tool, sessionID: event.sessionID, callID: event.id } as never,
+              {} as never,
+            ),
           )
         }),
       )
@@ -367,11 +476,16 @@ export const openCodeDiscordPresenceV2 = {
     const eventTask = (async () => {
       try {
         for await (const envelope of ctx.event.subscribe({ signal: abort.signal })) {
+          // Cache updates are idempotent, so every load may run them even when
+          // the event itself is deduplicated below.
           updateIdentityCache(identityCache, envelope)
+          // Every loaded instance receives every event; act on each one once.
+          if (!markEventSeen(entry, envelope)) continue
           const translated = translateV2Event(envelope)
-          if (!translated || typeof handlers.event !== "function") continue
+          const eventHandler = handlers.event
+          if (!translated || typeof eventHandler !== "function") continue
           try {
-            await handlers.event({ event: translated as never })
+            await runSerialized(entry, () => eventHandler({ event: translated as never }))
           } catch {
             // The V1 handler logs internally; never tear down the subscription.
           }
@@ -396,13 +510,8 @@ export const openCodeDiscordPresenceV2 = {
           // ignore
         }
       }
-      try {
-        // The V1 `Hooks` type does not declare `dispose`, but the V1 engine
-        // always returns it at runtime.
-        await (handlers as { dispose?: () => Promise<void> }).dispose?.()
-      } catch {
-        // ignore
-      }
+      // The shared engine lives as long as any loaded project still uses it.
+      await releaseEngine(entry)
     }
   },
 }

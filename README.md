@@ -66,6 +66,10 @@ V2 differences worth knowing:
   empty. Agent, model, file spotlight, idle, and recap rotation are unchanged.
 - V2 renamed tool arguments (`path` instead of `filePath`) and tools
   (`shell`, `subagent`, `patch`); both naming schemes are handled.
+- V2 loads a plugin once per project directory inside one server process. The
+  adapter keeps a single shared presence engine with one Discord connection and
+  exactly-once event handling, so parallel projects do not fight over the
+  activity shown in Discord.
 
 ## Quick Start
 

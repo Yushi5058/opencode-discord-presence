@@ -1,5 +1,14 @@
 import { describe, expect, test } from "bun:test"
-import { createClientShim, PLUGIN_ID, resolveIdentity, translateV2Event } from "./v2.js"
+import {
+  createClientShim,
+  type EngineEntry,
+  markEventSeen,
+  PLUGIN_ID,
+  resolveIdentity,
+  runSerialized,
+  SEEN_EVENT_LIMIT,
+  translateV2Event,
+} from "./v2.js"
 
 // ─── translateV2Event ─────────────────────────────────────────────────────────
 
@@ -211,5 +220,83 @@ describe("dual V1/V2 plugin export", () => {
   test("named V1 export is preserved for existing consumers", async () => {
     const mod = await import("./index.js")
     expect(typeof mod.OpenCodeDiscordPresence).toBe("function")
+  })
+})
+
+// ─── markEventSeen ──────────────────────────────────────────────────────────
+
+function makeEntry(): EngineEntry {
+  return {
+    handlers: Promise.resolve({} as never),
+    refs: 1,
+    seenEvents: new Set(),
+    seenOrder: [],
+    queue: Promise.resolve(),
+  }
+}
+
+describe("markEventSeen", () => {
+  test("lets the first delivery through and drops later duplicates", () => {
+    const entry = makeEntry()
+
+    expect(markEventSeen(entry, { id: "evt_1", type: "session.created" })).toBe(true)
+    expect(markEventSeen(entry, { id: "evt_1", type: "session.created" })).toBe(false)
+    expect(markEventSeen(entry, { id: "evt_2", type: "session.created" })).toBe(true)
+  })
+
+  test("passes events without an id through", () => {
+    const entry = makeEntry()
+
+    expect(markEventSeen(entry, { type: "session.created" })).toBe(true)
+    expect(markEventSeen(entry, { type: "session.created" })).toBe(true)
+  })
+
+  test("forgets the oldest ids once the window is full", () => {
+    const entry = makeEntry()
+
+    for (let index = 0; index < SEEN_EVENT_LIMIT; index += 1) {
+      markEventSeen(entry, { id: `evt_${index}` })
+    }
+    expect(entry.seenEvents.size).toBe(SEEN_EVENT_LIMIT)
+
+    markEventSeen(entry, { id: "evt_new" })
+
+    expect(entry.seenEvents.has("evt_0")).toBe(false)
+    expect(markEventSeen(entry, { id: "evt_0" })).toBe(true)
+  })
+})
+
+// ─── runSerialized ──────────────────────────────────────────────────────────
+
+describe("runSerialized", () => {
+  test("runs tasks strictly in order across loaded instances", async () => {
+    const entry = makeEntry()
+    const order: string[] = []
+
+    await Promise.all([
+      runSerialized(entry, async () => {
+        order.push("a")
+      }),
+      runSerialized(entry, async () => {
+        order.push("b")
+      }),
+      runSerialized(entry, async () => {
+        order.push("c")
+      }),
+    ])
+
+    expect(order).toEqual(["a", "b", "c"])
+  })
+
+  test("keeps the queue alive after a rejection", async () => {
+    const entry = makeEntry()
+
+    await expect(
+      runSerialized(entry, async () => {
+        throw new Error("boom")
+      }),
+    ).rejects.toThrow("boom")
+
+    await expect(runSerialized(entry, async () => "ok")).resolves.toBe("ok")
   })
 })
