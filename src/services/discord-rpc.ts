@@ -22,7 +22,7 @@ const MAX_STATE_LENGTH = 126
 const PRESENCE_BUTTONS: NonNullable<SetActivity["buttons"]> = [
   {
     label: "View on GitHub",
-    url: "https://github.com/Puri12/opencode-discord-presence",
+    url: "https://github.com/Yushi5058/opencode-discord-presence",
   },
 ]
 

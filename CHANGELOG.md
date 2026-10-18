@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-18
+
+Fork release: OpenCode V2 support, published as `@yushi_61/opencode-discord-presence`.
+
+### Added
+
+- **OpenCode V2 support.** V2 replaced the V1 plugin contract — the default export must be an
+  `{ id, setup }` definition and V1 hook objects are not executed, so V2 rejected the package with
+  `SchemaError(Expected object at ["default"])`. `src/v2.ts` adds a V2 adapter that reuses the
+  existing presence engine: it shims the V1 `client` (`session.get`, `app.log`), subscribes to
+  `ctx.event` and translates V2 envelopes into the V1 `{ type, properties }` shape, and maps V2's
+  `session.hook("prompt")` / `tool.hook("execute.before" | "execute.after")` onto the V1 handlers.
+- Dual V1/V2 default export (`{ id, setup, server }`), a `./server` subpath export and `server.js`
+  so V2 directory resolution (`<plugin-dir>/server`) works from a checkout.
+- `prepare` build script so Git-based installs produce `dist/` (which is gitignored).
+
+### Fixed
+
+- **Duplicate presence engines under V2.** V2 instantiates a plugin once per project directory
+  inside a single server process, and each load is a separate module graph, so the V1
+  `isPrimaryPluginInstance` guard no longer protected against duplicate engines. Measured on
+  2.0.32: a second project produced a second engine and a second Discord IPC connection, so the
+  activity shown in Discord could flip between instances, and the process-wide event stream was
+  delivered once per loaded instance. One engine is now kept per process, ref-counted, with
+  `markEventSeen` deduplicating envelopes by `id` (bounded 4096-entry window) and `runSerialized`
+  funnelling engine calls through a shared queue.
+
+### Changed
+
+- Renamed the package to `@yushi_61/opencode-discord-presence` (fork of
+  [Puri12/opencode-discord-presence](https://github.com/Puri12/opencode-discord-presence)) and
+  updated the repository, homepage, issues, and Discord presence button URLs.
+- Removed the Korean README (`README.ko.md`) — documentation is English-only now. The runtime
+  Korean locale (`language: "ko"`, including particle handling) is unchanged.
+- V2 specifics handled in the adapter: `session.get` identity fallback in the prompt hook, and
+  V2's renamed tool args (`path` instead of `filePath`) and tools (`shell`, `subagent`, `patch`).
+  V2 removed `todowrite`, so the mission board stays empty there.
+
+The V2 adapter is adapted from the V2 port contributed by Muhammad Rheza Alfin (vheins) in
+[Puri12/opencode-discord-presence#14](https://github.com/Puri12/opencode-discord-presence/pull/14),
+reused under the MIT license.
+
 ## [0.7.2] - 2026-05-28
 
 ### Fixed

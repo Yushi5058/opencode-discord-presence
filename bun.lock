@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "opencode-discord-presence",
+      "name": "@yushi_61/opencode-discord-presence",
       "dependencies": {
         "@xhayper/discord-rpc": "^1.3.4",
       },

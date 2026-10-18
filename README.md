@@ -1,11 +1,25 @@
-# opencode-discord-presence
+# opencode-discord-presence (OpenCode V2)
 
-[![npm version](https://img.shields.io/npm/v/opencode-discord-presence.svg)](https://www.npmjs.com/package/opencode-discord-presence)
+[![npm version](https://img.shields.io/npm/v/@yushi_61/opencode-discord-presence.svg)](https://www.npmjs.com/package/@yushi_61/opencode-discord-presence)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-[한국어](README.ko.md) | English
-
 Display your current OpenCode session status in Discord Rich Presence. Show which AI agent you're using, the current model, prompt/file activity, and more.
+
+> ### About this fork
+>
+> This repository is the **official home of OpenCode V2 support** for Discord Rich Presence.
+> OpenCode V2 replaced the V1 plugin contract (`{ id, server }` hook objects are no longer
+> executed), and [the original plugin](https://github.com/Puri12/opencode-discord-presence)
+> is V1-only — the upstream maintainer has pointed V2 users at a fork. This fork ships a
+> **dual V1/V2 package** built from one source tree, published to npm as
+> [`@yushi_61/opencode-discord-presence`](https://www.npmjs.com/package/@yushi_61/opencode-discord-presence).
+>
+> All original code, design, documentation, and tests belong to
+> [Puri12/opencode-discord-presence](https://github.com/Puri12/opencode-discord-presence) (MIT) —
+> see [Credits](#credits). The V2 adapter is adapted from the V2 port contributed by
+> [Muhammad Rheza Alfin (vheins)](https://github.com/vheins) in
+> [Puri12/opencode-discord-presence#14](https://github.com/Puri12/opencode-discord-presence/pull/14).
+> This fork follows upstream, so V1 users can use it too.
 
 <img width="293" height="119" alt="image" src="https://github.com/user-attachments/assets/879207e0-4759-477d-ba34-f79f927737bd" />
 
@@ -15,48 +29,62 @@ Display your current OpenCode session status in Discord Rich Presence. Show whic
 - **Real-time agent display** - Shows which AI agent (Claude, Prometheus, etc.) you're currently using
 - **Model information** - Displays the active model (Claude Sonnet, GPT-4, etc.)
 - **Discord elapsed timer** - Presence includes a Discord start timestamp so elapsed coding time appears in the client timer UI
-- **Korean language support** - Proper Korean particle handling (을/를, 은/는)
+- **Localization** - English (default) and Korean (`language: "ko"`), with correct particle selection for agent names
 - **Idle detection** - Automatically shows when you're taking a break
 - **Live File Spotlight** - Shows the file currently being edited, read, or diagnosed by the agent, with language-specific Discord icons
-- **Task Mission Board** - Displays active todo progress with task labels and completion counts (e.g., "Implementing dark mode (2/5)")
+- **Task Mission Board** - Displays active todo progress with task labels and completion counts (e.g., "Implementing dark mode (2/5)") — **V1 only**: OpenCode V2 removed the `todowrite` tool this card is driven by
 - **Diagnostics placeholder support** - Keeps the diagnostics display surface reserved for future/external integrations; current OpenCode plugin API v1 logs diagnostics events but does not expose counts (see [limitations](#limitations))
 - **Smart rotation** - Critical states (errors, idle, all-done) pin; informational cards (file spotlight, mission board, session stats) rotate every 20 seconds by default
 - **Session recap** - When a session ends, a recap card shows total prompts and files touched for 30 seconds
 
 ## Installation
 
+One package supports both generations: **OpenCode V2** and **OpenCode V1**.
+
 ```bash
 # Using bun
-bun add opencode-discord-presence
+bun add @yushi_61/opencode-discord-presence
 
 # Using npm
-npm install opencode-discord-presence
+npm install @yushi_61/opencode-discord-presence
 
 # Using pnpm
-pnpm add opencode-discord-presence
+pnpm add @yushi_61/opencode-discord-presence
 ```
 
 ### OpenCode V2
 
-OpenCode V2 changed the plugin contract: the default export must be an
-`{ id, setup }` definition and V1 hook objects are not executed at all. This
-fork ships a dual V1/V2 package from one source tree — `src/v2.ts` maps the V2
-context, hooks, and events onto the existing presence engine, so the same build
-works on both generations.
-
-Install the fork straight from Git (no npm publish required):
+V2 manages plugins itself:
 
 ```bash
-opencode plugin add github:Yushi5058/opencode-discord-presence
+opencode plugin add @yushi_61/opencode-discord-presence
 ```
 
 Or pin it in `opencode.json(c)` — V2 uses the plural `plugins` key:
 
 ```jsonc
 {
-  "plugins": ["github:Yushi5058/opencode-discord-presence"]
+  "plugins": ["@yushi_61/opencode-discord-presence"]
 }
 ```
+
+### OpenCode V1
+
+V1 uses the singular `plugin` key:
+
+```json
+{
+  "plugin": ["@yushi_61/opencode-discord-presence"]
+}
+```
+
+### How V2 support works
+
+OpenCode V2 changed the plugin contract: the default export must be an
+`{ id, setup }` definition and V1 hook objects are not executed at all. This
+package ships a dual V1/V2 build from one source tree — `src/v2.ts` maps the V2
+context, hooks, and events onto the existing presence engine, so the exact same
+build works on both generations.
 
 V2 differences worth knowing:
 
@@ -77,7 +105,7 @@ Register the plugin in your `opencode.json`:
 
 ```json
 {
-  "plugin": ["opencode-discord-presence"]
+  "plugin": ["@yushi_61/opencode-discord-presence"]
 }
 ```
 
@@ -191,23 +219,30 @@ The plugin hooks into OpenCode's event system:
 - **session.idle** - Triggers idle state with the last active task shown in the state line
 - **session.deleted** - Triggers session recap showing total prompts and files touched for 30 seconds
 
+> On OpenCode V2 the adapter subscribes to the equivalent V2 surfaces —
+> `session.hook("prompt")`, `tool.hook("execute.before" / "execute.after")` and
+> `ctx.event` — and translates them into the V1 event shapes above. V2 has no
+> `todo.updated` event, so the mission board stays empty there.
+
 ### Limitations
 
 - **lsp.client.diagnostics** is listened for, but error/warning counts are not available through the OpenCode plugin API v1. Diagnostic counts shown in presence require external LSP configuration. The plugin logs diagnostics events but does not fabricate counts.
 
 ### Presence States
 
-| State | English | Korean | Description |
-|-------|---------|--------|-------------|
-| Active editing | `Working with {agent}` | `{agent}을/를 작업중` | File being edited |
-| Active reading | `Working with {agent}` | `{agent}을/를 작업중` | File being read |
-| Task active | `Working with {agent}` | `{agent}을/를 작업중` | With mission progress |
-| Diagnostics error | `Working with {agent}` | `{agent}을/를 작업중` | Errors detected |
-| Idle | `{agent} is idle` | `{agent}은/는 휴식중` | No activity |
-| Session complete | `Session Complete!` | `세션 완료!` | Session ended (30s) |
-| All tasks done | `All tasks complete!` | `모든 작업 완료!` | No pending tasks |
+| State | English | Description |
+|-------|---------|-------------|
+| Active editing | `Working with {agent}` | File being edited |
+| Active reading | `Working with {agent}` | File being read |
+| Task active | `Working with {agent}` | With mission progress |
+| Diagnostics error | `Working with {agent}` | Errors detected |
+| Idle | `{agent} is idle` | No activity |
+| Session complete | `Session Complete!` | Session ended (30s) |
+| All tasks done | `All tasks complete!` | No pending tasks |
 
-Korean particles (을/를, 은/는) are automatically selected based on whether the agent name ends with a consonant (받침).
+With `language: "ko"` the same states are rendered in Korean; the plugin picks the
+correct particle for the agent name automatically based on whether it ends with a
+consonant.
 
 ## Visual Sample Matrix
 
@@ -218,10 +253,10 @@ The following states are fully supported in v1 (runtime-backed):
 | Editing file | `Working with Claude` | `src/plugin.ts` | language icon |
 | Reading file | `Working with Claude` | `src/services/discord-rpc.ts` | action-reading |
 | Task active | `Working with Claude` | `Implementing dark mode (2/5)` | task |
-| Diagnostics error | `Working with Claude` | `5 errors, 2 warnings` / `오류 5개, 경고 2개` | state-error |
-| Idle | `Claude is idle` | `Last task: Add theme toggle` / `마지막 작업: Add theme toggle` | state-idle |
-| Session recap | `Session Complete!` / `세션 완료!` | `27 prompts • 3 files` / `27개 프롬프트 • 3개 파일` | state-recap |
-| All tasks complete | `All tasks complete!` / `모든 작업 완료!` | `5/5 finished` / `5/5 완료` | state-complete |
+| Diagnostics error | `Working with Claude` | `5 errors, 2 warnings` | state-error |
+| Idle | `Claude is idle` | `Last task: Add theme toggle` | state-idle |
+| Session recap | `Session Complete!` | `27 prompts • 3 files` | state-recap |
+| All tasks complete | `All tasks complete!` | `5/5 finished` | state-complete |
 
 Illustrative-only states (not implemented in v1):
 
@@ -273,7 +308,7 @@ src/
     ├── file-icons.ts        # Language → icon mapping
     ├── session-metrics.ts   # Session counters + recap
     ├── tool-label.ts        # Tool → operation label mapping
-    └── particle.ts          # Korean particle handling (을/를, 은/는)
+    └── particle.ts          # Korean particle handling
 ```
 
 ## Contributing
@@ -289,6 +324,25 @@ Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md)
 5. Push to the branch (`git push origin feature/amazing-feature`)
 6. Open a Pull Request
 
+## Credits
+
+This package is a fork of **[Puri12/opencode-discord-presence](https://github.com/Puri12/opencode-discord-presence)**
+— the original Discord Rich Presence plugin for OpenCode. The presence engine, configuration
+system, localization, Discord RPC service, tests, and the vast majority of this documentation
+were written by [Puri12](https://github.com/Puri12) and contributors, and are reused here under
+the MIT license.
+
+- **Original project / source code:** [Puri12/opencode-discord-presence](https://github.com/Puri12/opencode-discord-presence) (MIT)
+- **V2 adapter:** adapted from the OpenCode V2 port contributed by
+  [Muhammad Rheza Alfin (vheins)](https://github.com/vheins) in
+  [PR Puri12/opencode-discord-presence#14](https://github.com/Puri12/opencode-discord-presence/pull/14),
+  maintained here for V2
+- **V2 support maintained by:** [Yushi5058](https://github.com/Yushi5058)
+
+If you only use OpenCode V1, the [original plugin](https://github.com/Puri12/opencode-discord-presence)
+works and is the upstream source of most of this code. Fixes that apply to both generations are
+welcome upstream; V2-specific work lives here.
+
 ## License
 
 MIT License - see [LICENSE](LICENSE) for details.
@@ -296,6 +350,7 @@ MIT License - see [LICENSE](LICENSE) for details.
 ## Related Projects
 
 - [OpenCode](https://github.com/opencode-ai/opencode) - The AI coding assistant this plugin extends
+- [Puri12/opencode-discord-presence](https://github.com/Puri12/opencode-discord-presence) - The original V1 plugin this fork is built on
 - [@xhayper/discord-rpc](https://github.com/xhayper/discord-rpc) - Discord RPC library used by this plugin
 
 ## Changelog

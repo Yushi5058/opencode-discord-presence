@@ -534,7 +534,7 @@ describe("DiscordRPCService", () => {
       expect(activity.buttons).toEqual([
         {
           label: "View on GitHub",
-          url: "https://github.com/Puri12/opencode-discord-presence",
+          url: "https://github.com/Yushi5058/opencode-discord-presence",
         },
       ])
     })

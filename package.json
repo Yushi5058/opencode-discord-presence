@@ -1,7 +1,7 @@
 {
-  "name": "opencode-discord-presence",
-  "version": "0.7.2",
-  "description": "Discord Rich Presence plugin for OpenCode - Display your current AI agent, model, and status in Discord",
+  "name": "@yushi_61/opencode-discord-presence",
+  "version": "0.8.0",
+  "description": "Discord Rich Presence plugin for OpenCode V1 and V2 - Display your current AI agent, model, and status in Discord",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -19,7 +19,8 @@
     "dist",
     "server.js",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "dev": "bun run --watch src/index.ts",
@@ -35,23 +36,31 @@
   },
   "keywords": [
     "opencode",
+    "opencode-plugin",
+    "opencode-v2",
     "discord",
     "rich-presence",
     "rpc",
-    "claude",
     "ai",
     "plugin"
   ],
   "author": "Puri12",
+  "contributors": [
+    "Yushi5058 (V2 support maintainer, npm scope yushi_61)",
+    "Muhammad Rheza Alfin (vheins) (original V2 adapter)"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Puri12/opencode-discord-presence"
+    "url": "git+https://github.com/Yushi5058/opencode-discord-presence.git"
   },
   "bugs": {
-    "url": "https://github.com/Puri12/opencode-discord-presence/issues"
+    "url": "https://github.com/Yushi5058/opencode-discord-presence/issues"
   },
-  "homepage": "https://github.com/Puri12/opencode-discord-presence#readme",
+  "homepage": "https://github.com/Yushi5058/opencode-discord-presence#readme",
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=18.0.0",
     "bun": ">=1.1.0"
