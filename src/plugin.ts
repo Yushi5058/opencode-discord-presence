@@ -6,6 +6,7 @@ import { loadConfigFile } from "./config-loader.js"
 import { buildInstancesDir, createOwnershipHandler } from "./lifecycle/ownership-handler.js"
 import { createRecapScheduler, type RecapScheduler } from "./lifecycle/recap-scheduler.js"
 import { createRotationTicker } from "./lifecycle/rotation-ticker.js"
+import { ClientWatchdog, countAttachedClients } from "./services/client-watchdog.js"
 import { DiscordRPCService } from "./services/discord-rpc.js"
 import { InstanceCoordinator } from "./services/instance-coordinator.js"
 import { PresenceOrchestrator } from "./services/presence-orchestrator.js"
@@ -118,6 +119,12 @@ export const OpenCodeDiscordPresence: Plugin = async (ctx) => {
   let rotationTimer: ReturnType<typeof setInterval> | null = null
   let activeRecapScheduler: RecapScheduler | null = null
   let shutdownStarted = false
+  /**
+   * True while no OpenCode client (TUI / web) is attached to this service —
+   * set by the auto-clear watchdog, gates every presence push so a background
+   * session finishing after the user exited cannot resurrect stale presence.
+   */
+  let clientDetached = false
 
   const warnDebug = (scope: string, error: unknown): void => {
     if (!config.debug) return
@@ -175,6 +182,7 @@ export const OpenCodeDiscordPresence: Plugin = async (ctx) => {
 
   const pushPresence = async () => {
     if (!rpc) return
+    if (clientDetached) return
     if (!coordinator.isOwner()) return
     const snapshotWithMetrics: PresenceSnapshot = {
       ...snapshot,
@@ -251,6 +259,41 @@ export const OpenCodeDiscordPresence: Plugin = async (ctx) => {
   }
 
   /**
+   * Auto-clear watchdog (OpenCode V2): the TUI is a *client* of the background
+   * service hosting this plugin; quitting it (Ctrl+C / Q) closes the client's
+   * event-stream connection but leaves the service — and this Discord RPC
+   * connection — running, so presence used to stay visible forever. V2
+   * publishes no client-disconnect event plugins can observe, so we count how
+   * many clients hold established TCP connections to this service process and
+   * clear the activity once the last one has been gone for
+   * `richPresence.autoClearSeconds`. See services/client-watchdog.ts.
+   */
+  const clientWatchdog =
+    config.richPresence.autoClearSeconds > 0
+      ? new ClientWatchdog({
+          countClients: countAttachedClients,
+          graceMs: config.richPresence.autoClearSeconds * 1000,
+          onDetach: () => {
+            clientDetached = true
+            stopRotationTimer()
+            if (config.debug) {
+              console.log("[discord-presence] no OpenCode clients attached — clearing presence")
+            }
+            if (coordinator.isOwner()) void rpc?.clear()
+          },
+          onAttach: () => {
+            clientDetached = false
+            if (!coordinator.isOwner()) return
+            startRotationTimer()
+            void pushPresence()
+          },
+          onError: (error) => warnDebug("client watchdog", error),
+        })
+      : null
+
+  clientWatchdog?.start()
+
+  /**
    * Full graceful teardown — invoked by the plugin's `dispose` hook AND by
    * `SIGINT` / `SIGTERM` fallbacks so any exit path (opencode shutdown,
    * user `Ctrl+C`, or process kill via signal) releases the primary-plugin
@@ -267,6 +310,7 @@ export const OpenCodeDiscordPresence: Plugin = async (ctx) => {
     releasePrimaryPluginInstance()
     ownershipHandler.cancelPending()
     cancelPendingRecap()
+    clientWatchdog?.stop()
     coordinator.stop()
     stopRotationTimer()
     if (!rpc) return

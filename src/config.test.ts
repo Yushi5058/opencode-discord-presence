@@ -206,6 +206,43 @@ describe("getConfig", () => {
     expect(config.richPresence.rotationIntervalSeconds).toBe(20)
   })
 
+  test("autoClearSeconds defaults to 8", () => {
+    const config = getConfig({})
+    expect(config.richPresence.autoClearSeconds).toBe(8)
+  })
+
+  test("autoClearSeconds accepts 0 (disabled)", () => {
+    const config = getConfig({ richPresence: { autoClearSeconds: 0 } })
+    expect(config.richPresence.autoClearSeconds).toBe(0)
+  })
+
+  test("autoClearSeconds accepts a custom value", () => {
+    const config = getConfig({ richPresence: { autoClearSeconds: 30 } })
+    expect(config.richPresence.autoClearSeconds).toBe(30)
+  })
+
+  test("autoClearSeconds rounds floating point values", () => {
+    const config = getConfig({ richPresence: { autoClearSeconds: 9.6 } })
+    expect(config.richPresence.autoClearSeconds).toBe(10)
+  })
+
+  test("autoClearSeconds treats negative values as disabled (0)", () => {
+    const config = getConfig({ richPresence: { autoClearSeconds: -3 } })
+    expect(config.richPresence.autoClearSeconds).toBe(0)
+  })
+
+  test("autoClearSeconds clamps values above maximum to 3600", () => {
+    const config = getConfig({ richPresence: { autoClearSeconds: 99999 } })
+    expect(config.richPresence.autoClearSeconds).toBe(3600)
+  })
+
+  test("ignores non-numeric autoClearSeconds and falls back to default", () => {
+    const config = getConfig({
+      richPresence: { autoClearSeconds: "soon" },
+    } as unknown as Parameters<typeof getConfig>[0])
+    expect(config.richPresence.autoClearSeconds).toBe(8)
+  })
+
   test("richPresence diagnostics field exists with errorsOnly default true", () => {
     const config = getConfig({})
     expect(config.richPresence.diagnostics.errorsOnly).toBe(true)

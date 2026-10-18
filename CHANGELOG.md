@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-10-18
+
+### Added
+
+- **Auto-clear presence when you exit OpenCode.** OpenCode V2 runs plugins inside the
+  long-lived background service, which outlives the TUI: quitting with Ctrl+C / Q closed the
+  client's event-stream connection but left the service — and this plugin's Discord RPC
+  connection — running, so presence stayed visible until the service was stopped by hand.
+  V2 publishes no client-disconnect event plugins can observe (`server.connected` is synthesized
+  per SSE stream by the HTTP layer and never reaches the event bus), so the plugin now counts
+  the TCP connections accepted by its own service process via procfs and clears the activity
+  once the last attached client has been gone for `richPresence.autoClearSeconds`
+  (default 8, i.e. within ~10s of exit including the ≤2s poll; `0` disables). Re-attaching a
+  client (TUI / web / desktop) restores the last known presence instantly.
+  Detection is Linux-only (procfs); on other platforms or process shapes the watchdog is inert
+  and behavior is unchanged. See `src/services/client-watchdog.ts`.
+
 ## [0.8.1] - 2026-10-18
 
 ### Changed
@@ -280,7 +297,10 @@ Thanks to [@festivities](https://github.com/festivities) for the Desktop-compati
 - Follows OpenCode plugin architecture with `@opencode-ai/plugin`
 - TDD development approach
 
-[Unreleased]: https://github.com/Puri12/opencode-discord-presence/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/Yushi5058/opencode-discord-presence/compare/v0.8.2...HEAD
+[0.8.2]: https://github.com/Yushi5058/opencode-discord-presence/compare/v0.8.1...v0.8.2
+[0.8.1]: https://github.com/Yushi5058/opencode-discord-presence/compare/v0.8.0...v0.8.1
+[0.8.0]: https://github.com/Yushi5058/opencode-discord-presence/compare/v0.5.0...v0.8.0
 [0.5.0]: https://github.com/Puri12/opencode-discord-presence/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/Puri12/opencode-discord-presence/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Puri12/opencode-discord-presence/compare/v0.1.0...v0.3.0

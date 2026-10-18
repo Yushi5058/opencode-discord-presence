@@ -36,6 +36,7 @@ Display your current OpenCode session status in Discord Rich Presence. Show whic
 - **Diagnostics placeholder support** - Keeps the diagnostics display surface reserved for future/external integrations; current OpenCode plugin API v1 logs diagnostics events but does not expose counts (see [limitations](#limitations))
 - **Smart rotation** - Critical states (errors, idle, all-done) pin; informational cards (file spotlight, mission board, session stats) rotate every 20 seconds by default
 - **Session recap** - When a session ends, a recap card shows total prompts and files touched for 30 seconds
+- **Auto-clear on exit** - Presence disappears within ~10 seconds of closing every OpenCode client (TUI / web); Linux only, tunable via `richPresence.autoClearSeconds` (0 disables)
 
 ## Installation
 
@@ -98,6 +99,13 @@ V2 differences worth knowing:
   adapter keeps a single shared presence engine with one Discord connection and
   exactly-once event handling, so parallel projects do not fight over the
   activity shown in Discord.
+- V2 runs plugins inside the background *service*, which outlives the TUI.
+  The plugin therefore auto-clears presence ~`autoClearSeconds` (default 8)
+  after the last attached OpenCode client disconnects — i.e. within ~10s of
+  quitting with Ctrl+C / Q — and restores it when you attach a client again.
+  Detection reads Linux procfs (`/proc`); on macOS/Windows, or when the plugin
+  does not run inside the server process, the watchdog is inert and presence
+  persists until the service stops (the pre-0.8.2 behavior).
 
 ## Quick Start
 
@@ -129,6 +137,7 @@ Create a `.discord-presence.json` file in your project root (preferred) or home 
     "enableMissionBoard": true,
     "rotationIntervalSeconds": 20,
     "mainAgentOnly": false,
+    "autoClearSeconds": 8,
     "diagnostics": {
       "errorsOnly": true
     }
@@ -159,6 +168,7 @@ OPENCODE_DISCORD_DEBUG=true
 | `richPresence.enableMissionBoard` | `boolean` | `true` | Show task mission board card |
 | `richPresence.rotationIntervalSeconds` | `number` | `20` | How often informational cards rotate (10–60 seconds) |
 | `richPresence.mainAgentOnly` | `boolean` | `false` | When `true`, only `chat.message` events from the **main** session (root, no `parentID`) update Discord presence; sub-agent / task sessions are filtered out so a background planner or explore agent does not flicker the user's profile. When `false`, every chat.message overwrites presence — last writer wins, but the orchestrator still tracks busy/idle across all sessions so the "idle" text appears only when every tracked session reports idle. |
+| `richPresence.autoClearSeconds` | `number` | `8` | Seconds with **zero attached OpenCode clients** (TUI / web / desktop) before the Discord activity is cleared. Quitting the TUI closes its event-stream connection to the background service; this watchdog notices and clears presence ~this-many seconds later (plus a ≤2s poll interval) instead of leaving it stale forever. `0` disables. Requires Linux procfs — inert on macOS/Windows (see [limitations](#limitations)). |
 | `richPresence.diagnostics.errorsOnly` | `boolean` | `true` | Reserved for future/external diagnostics integrations; inactive with current OpenCode plugin API v1 |
 
 For backward compatibility, the parser also accepts `discordPresence.applicationId`, but new configs should use the top-level `applicationId` shown above.
@@ -227,6 +237,7 @@ The plugin hooks into OpenCode's event system:
 ### Limitations
 
 - **lsp.client.diagnostics** is listened for, but error/warning counts are not available through the OpenCode plugin API v1. Diagnostic counts shown in presence require external LSP configuration. The plugin logs diagnostics events but does not fabricate counts.
+- **Auto-clear on exit is Linux-only.** The plugin counts the TCP connections accepted by the OpenCode service process via procfs (`/proc/self/fd` + `/proc/net/tcp{,6}`) to detect attached clients; macOS and Windows have no procfs, so `autoClearSeconds` is inert there and presence persists until the service stops. "Zero listening sockets in this process" is treated as *unknown*, never as *zero clients*, so setups where the plugin does not run inside the server process (e.g. the V1 CLI) can never have their presence suppressed by mistake.
 
 ### Presence States
 

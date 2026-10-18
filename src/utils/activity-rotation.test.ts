@@ -27,6 +27,7 @@ function defaultOpts(): RichPresenceOptions {
     rotationIntervalSeconds: 20,
     diagnostics: { errorsOnly: true },
     mainAgentOnly: false,
+    autoClearSeconds: 8,
   }
 }
 
@@ -755,6 +756,7 @@ describe("resolveRotatingCard", () => {
     rotationIntervalSeconds: 20,
     diagnostics: { errorsOnly: true },
     mainAgentOnly: false,
+    autoClearSeconds: 8,
   }
 
   test("returns file-spotlight, task, session-stats in order when no warnings", () => {

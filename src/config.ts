@@ -22,6 +22,32 @@ export const MIN_ROTATION_INTERVAL_SECONDS = 10
 /** Maximum allowed rotation interval in seconds. */
 export const MAX_ROTATION_INTERVAL_SECONDS = 60
 
+/**
+ * Default seconds with zero attached OpenCode clients before the Discord
+ * activity is cleared (TUI exited). Includes the 2s poll interval, so the
+ * clear lands within ~10s of exit by default.
+ */
+export const DEFAULT_AUTO_CLEAR_SECONDS = 8
+
+/** Upper bound for autoClearSeconds (one hour). */
+export const MAX_AUTO_CLEAR_SECONDS = 3600
+
+/**
+ * Clamps and parses the auto-clear delay safely.
+ * `0` is valid and disables the watchdog; negatives fall back to 0
+ * (disabled is the safer misparse — never clears wrong data by accident),
+ * non-numeric input falls back to the default.
+ */
+function parseAutoClearSeconds(raw?: number): number {
+  if (typeof raw !== "number" || !Number.isFinite(raw)) {
+    return DEFAULT_AUTO_CLEAR_SECONDS
+  }
+  const rounded = Math.round(raw)
+  if (rounded < 0) return 0
+  if (rounded > MAX_AUTO_CLEAR_SECONDS) return MAX_AUTO_CLEAR_SECONDS
+  return rounded
+}
+
 function parseLanguage(lang?: string): Language {
   const normalized = lang?.toLowerCase()
   if (normalized === "ko" || normalized === "kr" || normalized === "korean") return "ko"
@@ -58,6 +84,7 @@ function parseRichPresenceOptions(raw?: Partial<RichPresenceOptions>): RichPrese
       rotationIntervalSeconds: DEFAULT_ROTATION_INTERVAL_SECONDS,
       diagnostics: { errorsOnly: true },
       mainAgentOnly: false,
+      autoClearSeconds: DEFAULT_AUTO_CLEAR_SECONDS,
     }
   }
   return {
@@ -68,6 +95,7 @@ function parseRichPresenceOptions(raw?: Partial<RichPresenceOptions>): RichPrese
       errorsOnly: asBoolean(raw.diagnostics?.errorsOnly) ?? true,
     },
     mainAgentOnly: asBoolean(raw.mainAgentOnly) ?? false,
+    autoClearSeconds: parseAutoClearSeconds(raw.autoClearSeconds),
   }
 }
 

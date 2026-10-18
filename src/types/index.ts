@@ -30,6 +30,17 @@ export interface RichPresenceOptions {
    * "X is idle" text appears only when every tracked session reports idle.
    */
   mainAgentOnly: boolean
+  /**
+   * Seconds with zero attached OpenCode clients (TUI / web / desktop) before
+   * the Discord activity is cleared. Quitting the TUI closes its event-stream
+   * connection to the background service; this watchdog notices and clears
+   * presence ~this-many seconds later instead of leaving it stale forever.
+   *
+   * `0` disables the auto-clear entirely. Detection reads Linux procfs and is
+   * inert on other platforms or when the plugin does not run inside the
+   * server process (see services/client-watchdog.ts).
+   */
+  autoClearSeconds: number
 }
 
 export interface PresenceConfig {

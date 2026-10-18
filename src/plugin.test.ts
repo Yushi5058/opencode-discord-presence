@@ -393,6 +393,7 @@ describe("getActivity integration with snapshot", () => {
     rotationIntervalSeconds: 20,
     diagnostics: { errorsOnly: true },
     mainAgentOnly: false,
+    autoClearSeconds: 8,
   }
 
   test("idle state shows best available context", () => {
@@ -1121,6 +1122,7 @@ describe("recap reducer clearing contract (oracle P1)", () => {
       rotationIntervalSeconds: 20,
       diagnostics: { errorsOnly: true },
       mainAgentOnly: false,
+      autoClearSeconds: 8,
     }
 
     let snapshot = createInitialPresenceState()
