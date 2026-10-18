@@ -9,10 +9,15 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     }
   },
   "files": [
     "dist",
+    "server.js",
     "README.md",
     "LICENSE"
   ],
@@ -25,6 +30,7 @@
     "format": "biome format --write src/",
     "test": "bun test",
     "test:watch": "bun test --watch",
+    "prepare": "tsc -p tsconfig.build.json",
     "prepublishOnly": "bun run build"
   },
   "keywords": [

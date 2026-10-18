@@ -4,7 +4,7 @@ export interface ToolLabelInput {
   command?: string
 }
 
-const EDITING_TOOLS = new Set(["edit", "write", "replace", "multiedit"])
+const EDITING_TOOLS = new Set(["edit", "write", "replace", "multiedit", "patch"])
 const READING_TOOLS = new Set(["read", "view"])
 const SEARCHING_TOOLS = new Set(["grep", "glob", "search", "find"])
 

@@ -36,6 +36,37 @@ npm install opencode-discord-presence
 pnpm add opencode-discord-presence
 ```
 
+### OpenCode V2
+
+OpenCode V2 changed the plugin contract: the default export must be an
+`{ id, setup }` definition and V1 hook objects are not executed at all. This
+fork ships a dual V1/V2 package from one source tree — `src/v2.ts` maps the V2
+context, hooks, and events onto the existing presence engine, so the same build
+works on both generations.
+
+Install the fork straight from Git (no npm publish required):
+
+```bash
+opencode plugin add github:Yushi5058/opencode-discord-presence
+```
+
+Or pin it in `opencode.json(c)` — V2 uses the plural `plugins` key:
+
+```jsonc
+{
+  "plugins": ["github:Yushi5058/opencode-discord-presence"]
+}
+```
+
+V2 differences worth knowing:
+
+- V2 exposes no `client.app.log` equivalent; plugin diagnostics only appear with
+  `OPENCODE_DISCORD_DEBUG=true`.
+- V2 removed the `todowrite` tool, so the mission board / todo summary stays
+  empty. Agent, model, file spotlight, idle, and recap rotation are unchanged.
+- V2 renamed tool arguments (`path` instead of `filePath`) and tools
+  (`shell`, `subagent`, `patch`); both naming schemes are handled.
+
 ## Quick Start
 
 Register the plugin in your `opencode.json`:
@@ -49,6 +80,8 @@ Register the plugin in your `opencode.json`:
 That's it! The plugin will automatically connect to Discord and display your session status.
 
 > `opencode.json` only **registers** the plugin. All plugin settings live in `.discord-presence.json` or environment variables — see [Configuration](#configuration) below.
+>
+> On OpenCode V2 the key is `plugins` (plural) and package installs are managed with `opencode plugin add`.
 
 ## Configuration
 
