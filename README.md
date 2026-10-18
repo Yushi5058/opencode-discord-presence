@@ -289,6 +289,18 @@ bun run format
 bun run build
 ```
 
+### Releases
+
+Releases are published from CI with [npm Trusted Publishing](https://docs.npmjs.com/trusted-publishers)
+(OIDC — no `NPM_TOKEN` secret, and npm generates a provenance attestation automatically):
+
+1. Bump `version` in `package.json` and add a `CHANGELOG.md` entry.
+2. Commit, then tag and create a GitHub release (`github.com/Yushi5058/opencode-discord-presence/releases/new`).
+   That triggers `.github/workflows/publish.yml`, or run it manually with
+   `gh workflow run publish.yml`.
+3. The workflow type-checks, lints, tests, builds, and publishes the tarball to
+   [`@yushi_61/opencode-discord-presence`](https://www.npmjs.com/package/@yushi_61/opencode-discord-presence).
+
 ## Architecture
 
 ```

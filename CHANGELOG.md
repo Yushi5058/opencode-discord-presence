@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-10-18
+
+### Changed
+
+- Releases are now published from GitHub Actions with npm Trusted Publishing (OIDC) instead of
+  a long-lived `NPM_TOKEN`, so every release carries a provenance attestation that links the
+  tarball to this repository and commit. `.github/workflows/publish.yml` documents the setup.
+- README: added a "Releases" section describing the flow (bump version, tag, GitHub release).
+
+No runtime changes: the presence engine and the V2 adapter are identical to 0.8.0.
+
 ## [0.8.0] - 2026-10-18
 
 Fork release: OpenCode V2 support, published as `@yushi_61/opencode-discord-presence`.
