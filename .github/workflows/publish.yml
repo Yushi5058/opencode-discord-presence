@@ -38,10 +38,10 @@ jobs:
         with:
           bun-version: 1.3.14
 
-      # Node 24 bundles an npm new enough for trusted publishing; don't set
-      # `registry-url` here, because that would make setup-node write a
-      # placeholder _authToken into .npmrc and npm would try to use it
-      # instead of the OIDC token.
+      # No `registry-url` here: it makes setup-node write a placeholder
+      # `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}` into .npmrc.
+      # Harmless (npm falls back to OIDC when the token is empty) but
+      # pointless — the default registry is registry.npmjs.org anyway.
       - name: Setup Node.js (for npm publish)
         uses: actions/setup-node@v4
         with:
